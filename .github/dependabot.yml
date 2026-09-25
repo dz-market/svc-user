@@ -8,6 +8,9 @@ updates:
       groups:
           go-dependencies:
               patterns: ["*"]
+      ignore:
+          -   dependency-name: google.golang.org/grpc
+              versions: [ "1.84.0" ]
       commit-message:
           prefix: build
           include: scope
