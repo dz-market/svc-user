@@ -5,10 +5,6 @@ grpc:
     addr: ${GRPC_ADDR}
     reflection: ${GRPC_REFLECTION:-false}
 
-health:
-    period: 5s
-    timeout: 2s
-
 log:
     level: info
     format: text
