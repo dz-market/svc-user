@@ -4,6 +4,7 @@ go 1.27.1
 
 require (
 	github.com/dz-market/platform v0.3.0
+	golang.org/x/sync v0.23.0
 	google.golang.org/grpc v1.83.2
 )
 
