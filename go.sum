@@ -4,8 +4,8 @@ github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/docker/go-units v0.5.0 h1:69rxXcBk27SvSaaxTtLh/8llcHD8vYHT7WSdRZ/jvr4=
 github.com/docker/go-units v0.5.0/go.mod h1:fgPhTUdO+D/Jk86RDLlptpiXQzgHJF7gydDDbaIK4Dk=
-github.com/dz-market/platform v0.3.0 h1:h9MbZbceXVasyM14CemElX/9eOjqqwLAtjnKWGX0zP0=
-github.com/dz-market/platform v0.3.0/go.mod h1:jxB3b0sOIP/oHLScFsYEuvKZp2PDjT6Qaq2/VQhwTZ8=
+github.com/dz-market/platform v0.3.1 h1:uRNZlIzmIcjF2LlanqO6/Nc0ZJqOcsfK2sHe2q6Ub6Q=
+github.com/dz-market/platform v0.3.1/go.mod h1:jxB3b0sOIP/oHLScFsYEuvKZp2PDjT6Qaq2/VQhwTZ8=
 github.com/gabriel-vasile/mimetype v1.4.15 h1:05iP/CYtZ/w455R/KZM6rZ5ieAdh99UPtd+d3YzLmaI=
 github.com/gabriel-vasile/mimetype v1.4.15/go.mod h1:azpTcoLcDZRNgFou5j+APrqQx9HqVPWa6ijYQIIVswQ=
 github.com/go-logr/logr v1.4.3 h1:CjnDlHq8ikf6E492q6eKboGOC0T8CDaOvkHCIg8idEI=
