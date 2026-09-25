@@ -45,8 +45,9 @@ func Run(ctx context.Context, version string) error {
 
 	srv := server.New(
 		server.Options{
-			Addr:       cfg.GRPC.Addr,
-			Reflection: cfg.GRPC.Reflection,
+			Addr:            cfg.GRPC.Addr,
+			Reflection:      cfg.GRPC.Reflection,
+			ShutdownTimeout: cfg.ShutdownTimeout,
 		},
 		log,
 	)
