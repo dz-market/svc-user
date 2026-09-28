@@ -14,6 +14,7 @@ import (
 	"github.com/dz-market/svc-user/internal/config"
 	"github.com/dz-market/svc-user/internal/delivery/grpc/server"
 	logger "github.com/dz-market/svc-user/internal/infrastructure/observability/logger/slog"
+	"github.com/dz-market/svc-user/internal/infrastructure/persistence/postgres"
 )
 
 func Run(ctx context.Context, version string) error {
@@ -42,6 +43,25 @@ func Run(ctx context.Context, version string) error {
 		slog.String("grpc_addr", cfg.GRPC.Addr),
 		slog.String("log_level", cfg.Log.Level.String()),
 	)
+
+	db, err := postgres.New(
+		ctx, postgres.Options{
+			AppName:           cfg.ServiceName,
+			DSN:               cfg.Postgres.DSN,
+			MaxConns:          cfg.Postgres.MaxConns,
+			MinConns:          cfg.Postgres.MinConns,
+			MaxConnLifetime:   cfg.Postgres.MaxConnLifetime,
+			MaxConnIdleTime:   cfg.Postgres.MaxConnIdleTime,
+			HealthCheckPeriod: cfg.Postgres.HealthCheckPeriod,
+			ConnectTimeout:    cfg.Postgres.ConnectTimeout,
+			PingTimeout:       cfg.Postgres.PingTimeout,
+		}, log,
+	)
+	if err != nil {
+		return fmt.Errorf("postgres: %w", err)
+	}
+
+	defer db.Close()
 
 	srv := server.New(
 		server.Options{
