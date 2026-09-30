@@ -11,6 +11,7 @@ type Config struct {
 
 	GRPC     GRPC     `yaml:"grpc"`
 	Postgres Postgres `yaml:"postgres"`
+	Kafka    Kafka    `yaml:"kafka"`
 	Log      Log      `yaml:"log"`
 }
 
@@ -28,6 +29,10 @@ type Postgres struct {
 	HealthCheckPeriod time.Duration `yaml:"health_check_period"`
 	ConnectTimeout    time.Duration `yaml:"connect_timeout"`
 	PingTimeout       time.Duration `yaml:"ping_timeout"`
+}
+
+type Kafka struct {
+	Brokers []string `validate:"required,min=1,dive,required" yaml:"brokers"`
 }
 
 type Log struct {

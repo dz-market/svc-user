@@ -15,6 +15,9 @@ postgres:
     connect_timeout: 5s
     ping_timeout: 2s
 
+kafka:
+    brokers: ["${KAFKA_BROKERS}"]
+
 log:
     level: info
     format: text
