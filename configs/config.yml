@@ -17,6 +17,14 @@ postgres:
 
 kafka:
     brokers: ["${KAFKA_BROKERS}"]
+    consumer:
+        client_id: "${KAFKA_CONSUMER_CLIENT_ID:-}"
+        group_id: "${KAFKA_CONSUMER_GROUP_ID:-}"
+        min_retry_delay: 1s
+        max_retry_delay: 30s
+        commit_timeout: 10s
+    topics:
+        user_registered: "${KAFKA_TOPIC_USER_REGISTERED:-auth.user-registered.v1}"
 
 log:
     level: info

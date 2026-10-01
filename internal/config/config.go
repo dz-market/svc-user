@@ -32,7 +32,21 @@ type Postgres struct {
 }
 
 type Kafka struct {
-	Brokers []string `validate:"required,min=1,dive,required" yaml:"brokers"`
+	Brokers  []string `validate:"required,min=1,dive,required" yaml:"brokers"`
+	Consumer Consumer `yaml:"consumer"`
+	Topics   Topics   `yaml:"topics"`
+}
+
+type Consumer struct {
+	ClientID      string        `yaml:"client_id"`
+	GroupID       string        `yaml:"group_id"`
+	MinRetryDelay time.Duration `validate:"required,min=1s" yaml:"min_retry_delay"`
+	MaxRetryDelay time.Duration `validate:"required,min=1s" yaml:"max_retry_delay"`
+	CommitTimeout time.Duration `validate:"required,min=1s" yaml:"commit_timeout"`
+}
+
+type Topics struct {
+	UserRegistered string `yaml:"user_registered"`
 }
 
 type Log struct {
