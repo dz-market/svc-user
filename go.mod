@@ -4,10 +4,11 @@ go 1.27.1
 
 require (
 	github.com/dz-market/platform v0.3.1
+	github.com/dz-market/protobuf v0.3.0
 	github.com/twmb/franz-go v1.22.1
-	github.com/twmb/franz-go/plugin/kslog v1.0.0
 	golang.org/x/sync v0.23.0
 	google.golang.org/grpc v1.83.2
+	google.golang.org/protobuf v1.36.12
 )
 
 require (
@@ -33,5 +34,4 @@ require (
 	golang.org/x/sys v0.48.0 // indirect
 	golang.org/x/text v0.42.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260819154853-08b0e4226688 // indirect
-	google.golang.org/protobuf v1.36.12 // indirect
 )
