@@ -12,7 +12,10 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/dz-market/svc-user/internal/config"
+	"github.com/dz-market/svc-user/internal/delivery/event/kafka/consumer"
+	"github.com/dz-market/svc-user/internal/delivery/event/kafka/handler"
 	"github.com/dz-market/svc-user/internal/delivery/grpc/server"
+	"github.com/dz-market/svc-user/internal/infrastructure/messaging/kafka"
 	logger "github.com/dz-market/svc-user/internal/infrastructure/observability/logger/slog"
 	"github.com/dz-market/svc-user/internal/infrastructure/persistence/postgres"
 )
@@ -63,6 +66,37 @@ func Run(ctx context.Context, version string) error {
 
 	defer db.Close()
 
+	profileRepo := postgres.NewProfileRepository(db)
+
+	userRegisteredHandler := handler.NewUserRegistered(profileRepo, log)
+
+	kafkaConsumer := consumer.New(
+		consumer.Options{
+			MinRetryDelay: cfg.Kafka.Consumer.MinRetryDelay,
+			MaxRetryDelay: cfg.Kafka.Consumer.MaxRetryDelay,
+			CommitTimeout: cfg.Kafka.Consumer.CommitTimeout,
+			Log:           log,
+		},
+	)
+	kafkaConsumer.Register(cfg.Kafka.Topics.UserRegistered, userRegisteredHandler)
+
+	kafkaConsumerClient, err := kafka.NewConsumerClient(
+		kafka.ConsumerOptions{
+			Brokers:  cfg.Kafka.Brokers,
+			ClientID: cfg.Kafka.Consumer.ClientID,
+			GroupID:  cfg.Kafka.Consumer.GroupID,
+			Topics:   kafkaConsumer.Topics(),
+			Log:      log,
+		},
+	)
+	if err != nil {
+		return fmt.Errorf("kafka client: %w", err)
+	}
+
+	defer kafkaConsumerClient.Close()
+
+	kafkaConsumer.SetClient(kafkaConsumerClient)
+
 	srv := server.New(
 		server.Options{
 			Addr:            cfg.GRPC.Addr,
@@ -77,6 +111,12 @@ func Run(ctx context.Context, version string) error {
 	g.Go(
 		func() error {
 			return srv.Run(ctx)
+		},
+	)
+
+	g.Go(
+		func() error {
+			return kafkaConsumer.Run(ctx)
 		},
 	)
 
