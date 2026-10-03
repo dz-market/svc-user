@@ -2,11 +2,16 @@ package consumer
 
 import (
 	"context"
-	"errors"
 	"log/slog"
 	"time"
 
 	"github.com/twmb/franz-go/pkg/kgo"
+)
+
+const (
+	minRetryDelay = 1 * time.Second
+	maxRetryDelay = 30 * time.Second
+	commitTimeout = 10 * time.Second
 )
 
 type Handler interface {
@@ -14,61 +19,31 @@ type Handler interface {
 }
 
 type Options struct {
-	Client        *kgo.Client
-	MinRetryDelay time.Duration
-	MaxRetryDelay time.Duration
-	CommitTimeout time.Duration
-	Log           *slog.Logger
+	Client   *kgo.Client
+	Handlers map[string]Handler
+	Log      *slog.Logger
 }
 
 type Consumer struct {
-	client        *kgo.Client
-	handlers      map[string]Handler
-	minRetryDelay time.Duration
-	maxRetryDelay time.Duration
-	commitTimeout time.Duration
-	log           *slog.Logger
+	client   *kgo.Client
+	handlers map[string]Handler
+	log      *slog.Logger
 }
 
 func New(opts Options) *Consumer {
 	return &Consumer{
-		client:        opts.Client,
-		handlers:      make(map[string]Handler),
-		minRetryDelay: opts.MinRetryDelay,
-		maxRetryDelay: opts.MaxRetryDelay,
-		commitTimeout: opts.CommitTimeout,
-		log:           opts.Log,
+		client:   opts.Client,
+		handlers: opts.Handlers,
+		log:      opts.Log,
 	}
-}
-
-func (c *Consumer) Register(topic string, handler Handler) {
-	c.handlers[topic] = handler
-}
-
-func (c *Consumer) SetClient(client *kgo.Client) {
-	c.client = client
-}
-
-func (c *Consumer) Topics() []string {
-	topics := make([]string, 0, len(c.handlers))
-
-	for topic := range c.handlers {
-		topics = append(topics, topic)
-	}
-
-	return topics
 }
 
 func (c *Consumer) Run(ctx context.Context) error {
-	if c.client == nil {
-		return errors.New("kafka client is not set")
-	}
-
 	for {
 		fetches := c.client.PollFetches(ctx)
 
 		if ctx.Err() != nil || fetches.IsClientClosed() {
-			return nil
+			return nil //nolint:nilerr // shutdown is not an error
 		}
 
 		fetches.EachError(
@@ -103,17 +78,7 @@ func (c *Consumer) Run(ctx context.Context) error {
 }
 
 func (c *Consumer) handle(ctx context.Context, rec *kgo.Record) bool {
-	handler, ok := c.handlers[rec.Topic]
-	if !ok {
-		c.log.WarnContext(
-			ctx, "kafka message topic has no registered handler",
-			slog.String("topic", rec.Topic),
-			slog.Int("partition", int(rec.Partition)),
-			slog.Int64("offset", rec.Offset),
-		)
-
-		return true
-	}
+	handler := c.handlers[rec.Topic]
 
 	msg := newMessage(rec)
 
@@ -121,6 +86,10 @@ func (c *Consumer) handle(ctx context.Context, rec *kgo.Record) bool {
 		err := handler.Handle(ctx, msg)
 		if err == nil {
 			return true
+		}
+
+		if ctx.Err() != nil {
+			return false
 		}
 
 		delay := c.retryDelay(attempt)
@@ -148,7 +117,7 @@ func (c *Consumer) commit(ctx context.Context, recs []*kgo.Record) {
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), c.commitTimeout)
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), commitTimeout)
 	defer cancel()
 
 	if err := c.client.CommitRecords(ctx, recs...); err != nil {
@@ -160,5 +129,5 @@ func (c *Consumer) commit(ctx context.Context, recs []*kgo.Record) {
 }
 
 func (c *Consumer) retryDelay(attempt int) time.Duration {
-	return min(c.minRetryDelay<<min(attempt-1, 20), c.maxRetryDelay)
+	return min(minRetryDelay<<min(attempt-1, 20), maxRetryDelay)
 }
