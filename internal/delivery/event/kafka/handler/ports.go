@@ -2,10 +2,10 @@ package handler
 
 import (
 	"context"
-	"time"
-	"uuid"
+
+	"github.com/dz-market/svc-user/internal/application/user"
 )
 
-type ProfileRepository interface {
-	Create(ctx context.Context, userID uuid.UUID, registeredAt time.Time) error
+type UserService interface {
+	CreateProfile(ctx context.Context, in user.CreateProfileInput) error
 }

@@ -2,7 +2,6 @@ package handler
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 	"uuid"
@@ -11,30 +10,38 @@ import (
 
 	autheventsv1 "github.com/dz-market/protobuf/gen/go/auth/events/v1"
 
+	"github.com/dz-market/svc-user/internal/application/user"
 	"github.com/dz-market/svc-user/internal/delivery/event/kafka/consumer"
 )
 
+const headerEventID = "event-id"
+
 type UserRegistered struct {
-	profileRepo ProfileRepository
+	userService UserService
 	log         *slog.Logger
 }
 
-func NewUserRegistered(profileRepo ProfileRepository, log *slog.Logger) *UserRegistered {
+func NewUserRegistered(userService UserService, log *slog.Logger) *UserRegistered {
 	return &UserRegistered{
-		profileRepo: profileRepo,
+		userService: userService,
 		log:         log,
 	}
 }
 
 func (h *UserRegistered) Handle(ctx context.Context, msg consumer.Message) error {
+	log := h.log.With(
+		slog.String("topic", msg.Topic),
+		slog.Int("partition", int(msg.Partition)),
+		slog.Int64("offset", msg.Offset),
+		slog.String("event_id", msg.Headers[headerEventID]),
+	)
+
 	var event autheventsv1.UserRegistered
 
 	if err := proto.Unmarshal(msg.Value, &event); err != nil {
-		h.log.WarnContext(
-			ctx, "failed to unmarshal event",
-			slog.String("topic", msg.Topic),
-			slog.Int("partition", int(msg.Partition)),
-			slog.Int64("offset", msg.Offset),
+		log.WarnContext(
+			ctx, "skip malformed event",
+			slog.String("reason", "unmarshal"),
 			slog.Any("err", err),
 		)
 
@@ -43,11 +50,9 @@ func (h *UserRegistered) Handle(ctx context.Context, msg consumer.Message) error
 
 	userID, err := uuid.Parse(event.GetUserId())
 	if err != nil {
-		h.log.WarnContext(
-			ctx, "invalid user_id in event",
-			slog.String("topic", msg.Topic),
-			slog.Int("partition", int(msg.Partition)),
-			slog.Int64("offset", msg.Offset),
+		log.WarnContext(
+			ctx, "skip malformed event",
+			slog.String("reason", "user_id"),
 			slog.String("user_id", event.GetUserId()),
 			slog.Any("err", err),
 		)
@@ -57,30 +62,27 @@ func (h *UserRegistered) Handle(ctx context.Context, msg consumer.Message) error
 
 	registeredAt := event.GetRegisteredAt()
 	if err := registeredAt.CheckValid(); err != nil {
-		h.log.WarnContext(
-			ctx, "invalid registered_at timestamp",
-			slog.String("topic", msg.Topic),
-			slog.Int("partition", int(msg.Partition)),
-			slog.Int64("offset", msg.Offset),
+		log.WarnContext(
+			ctx, "skip malformed event",
+			slog.String("reason", "registered_at"),
 			slog.Any("err", err),
 		)
 
 		return nil
 	}
 
-	if err := h.profileRepo.Create(ctx, userID, registeredAt.AsTime()); err != nil {
-		if errors.Is(err, context.Canceled) {
-			return err
-		}
-
+	if err := h.userService.CreateProfile(
+		ctx, user.CreateProfileInput{
+			UserID:       userID,
+			RegisteredAt: registeredAt.AsTime(),
+		},
+	); err != nil {
 		return fmt.Errorf("create profile: %w", err)
 	}
 
-	h.log.InfoContext(
+	log.DebugContext(
 		ctx, "user registered event handled",
-		slog.String("topic", msg.Topic),
 		slog.String("user_id", userID.String()),
-		slog.Time("registered_at", registeredAt.AsTime()),
 	)
 
 	return nil
