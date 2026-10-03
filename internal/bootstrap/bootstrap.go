@@ -4,13 +4,16 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"maps"
 	"os"
 	"os/signal"
 	"runtime"
+	"slices"
 	"syscall"
 
 	"golang.org/x/sync/errgroup"
 
+	"github.com/dz-market/svc-user/internal/application/user"
 	"github.com/dz-market/svc-user/internal/config"
 	"github.com/dz-market/svc-user/internal/delivery/event/kafka/consumer"
 	"github.com/dz-market/svc-user/internal/delivery/event/kafka/handler"
@@ -68,24 +71,22 @@ func Run(ctx context.Context, version string) error {
 
 	profileRepo := postgres.NewProfileRepository(db)
 
-	userRegisteredHandler := handler.NewUserRegistered(profileRepo, log)
-
-	kafkaConsumer := consumer.New(
-		consumer.Options{
-			MinRetryDelay: cfg.Kafka.Consumer.MinRetryDelay,
-			MaxRetryDelay: cfg.Kafka.Consumer.MaxRetryDelay,
-			CommitTimeout: cfg.Kafka.Consumer.CommitTimeout,
-			Log:           log,
+	userService := user.NewService(
+		user.Options{
+			ProfileRepo: profileRepo,
 		},
 	)
-	kafkaConsumer.Register(cfg.Kafka.Topics.UserRegistered, userRegisteredHandler)
+
+	handlers := map[string]consumer.Handler{
+		cfg.Kafka.Topics.UserRegistered: handler.NewUserRegistered(userService, log),
+	}
 
 	kafkaConsumerClient, err := kafka.NewConsumerClient(
 		kafka.ConsumerOptions{
 			Brokers:  cfg.Kafka.Brokers,
-			ClientID: cfg.Kafka.Consumer.ClientID,
-			GroupID:  cfg.Kafka.Consumer.GroupID,
-			Topics:   kafkaConsumer.Topics(),
+			ClientID: cfg.ServiceName,
+			GroupID:  cfg.ServiceName,
+			Topics:   slices.Collect(maps.Keys(handlers)),
 			Log:      log,
 		},
 	)
@@ -93,9 +94,15 @@ func Run(ctx context.Context, version string) error {
 		return fmt.Errorf("kafka client: %w", err)
 	}
 
-	defer kafkaConsumerClient.Close()
+	kafkaConsumer := consumer.New(
+		consumer.Options{
+			Client:   kafkaConsumerClient,
+			Handlers: handlers,
+			Log:      log,
+		},
+	)
 
-	kafkaConsumer.SetClient(kafkaConsumerClient)
+	defer kafkaConsumerClient.Close()
 
 	srv := server.New(
 		server.Options{
