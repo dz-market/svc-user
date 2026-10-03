@@ -26,24 +26,20 @@ func NewConsumerClient(opts ConsumerOptions) (*kgo.Client, error) {
 		kgo.DisableAutoCommit(),
 		kgo.OnPartitionsAssigned(
 			func(ctx context.Context, _ *kgo.Client, assigned map[string][]int32) {
-				if opts.Log != nil {
-					opts.Log.InfoContext(
-						ctx, "kafka partitions assigned",
-						slog.String("group", opts.GroupID),
-						slog.Any("partitions", assigned),
-					)
-				}
+				opts.Log.InfoContext(
+					ctx, "kafka partitions assigned",
+					slog.String("group", opts.GroupID),
+					slog.Any("partitions", assigned),
+				)
 			},
 		),
 		kgo.OnPartitionsRevoked(
 			func(ctx context.Context, _ *kgo.Client, revoked map[string][]int32) {
-				if opts.Log != nil {
-					opts.Log.InfoContext(
-						ctx, "kafka partitions revoked",
-						slog.String("group", opts.GroupID),
-						slog.Any("partitions", revoked),
-					)
-				}
+				opts.Log.InfoContext(
+					ctx, "kafka partitions revoked",
+					slog.String("group", opts.GroupID),
+					slog.Any("partitions", revoked),
+				)
 			},
 		),
 	)
