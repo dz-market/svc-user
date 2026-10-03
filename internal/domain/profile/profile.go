@@ -6,6 +6,6 @@ import (
 )
 
 type Profile struct {
-	UserID   uuid.UUID
-	CreateAt time.Time
+	UserID    uuid.UUID
+	CreatedAt time.Time
 }
