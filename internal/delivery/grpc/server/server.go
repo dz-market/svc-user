@@ -3,19 +3,33 @@ package server
 import (
 	"context"
 	"log/slog"
+	"slices"
 	"time"
 
+	"buf.build/go/protovalidate"
+	"github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors"
+	"github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/selector"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health"
+	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/reflection"
 
+	pinterceptor "github.com/dz-market/platform/grpc/interceptor"
 	pserver "github.com/dz-market/platform/grpc/server"
+	userv1 "github.com/dz-market/protobuf/gen/go/user/api/v1"
+
+	"github.com/dz-market/svc-user/internal/delivery/grpc/server/interceptor"
 )
 
 type Options struct {
-	Addr            string
-	Reflection      bool
-	ShutdownTimeout time.Duration
+	Addr                  string
+	Reflection            bool
+	MaxRecvMsgSize        int
+	MaxConnectionAge      time.Duration
+	MaxConnectionAgeGrace time.Duration
+	ShutdownTimeout       time.Duration
+	Validator             protovalidate.Validator
+	Verifier              interceptor.TokenVerifier
 }
 
 type Server struct {
@@ -27,7 +41,29 @@ type Server struct {
 }
 
 func New(opts Options, log *slog.Logger) *Server {
-	srv := grpc.NewServer()
+	protectedMethods := []string{
+		userv1.ProfileService_GetMe_FullMethodName,
+	}
+
+	auth := selector.UnaryServerInterceptor(
+		interceptor.Auth(opts.Verifier),
+		selector.MatchFunc(
+			func(_ context.Context, c interceptors.CallMeta) bool {
+				return slices.Contains(protectedMethods, c.FullMethod())
+			},
+		),
+	)
+
+	srv := grpc.NewServer(
+		grpc.ChainUnaryInterceptor(pinterceptor.Default(log, opts.Validator, auth)...),
+		grpc.KeepaliveParams(
+			keepalive.ServerParameters{
+				MaxConnectionAge:      opts.MaxConnectionAge,
+				MaxConnectionAgeGrace: opts.MaxConnectionAgeGrace,
+			},
+		),
+		grpc.MaxRecvMsgSize(opts.MaxRecvMsgSize),
+	)
 
 	healthSrv := pserver.RegisterHealth(srv)
 
