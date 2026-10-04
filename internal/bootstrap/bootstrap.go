@@ -14,6 +14,7 @@ import (
 	"buf.build/go/protovalidate"
 	"golang.org/x/sync/errgroup"
 
+	"github.com/dz-market/platform/health"
 	userv1 "github.com/dz-market/protobuf/gen/go/user/api/v1"
 
 	"github.com/dz-market/svc-user/internal/application/user"
@@ -138,6 +139,19 @@ func Run(ctx context.Context, version string) error {
 	)
 
 	defer kafkaConsumerClient.Close()
+
+	checker := health.New(
+		health.Options{
+			Period:  cfg.Health.Period,
+			Timeout: cfg.Health.Timeout,
+		}, log,
+	)
+	checker.Register("postgres", db.Ping)
+	checker.Register(
+		"kafka", func(ctx context.Context) error {
+			return kafkaConsumerClient.Ping(ctx)
+		},
+	)
 
 	validator, err := protovalidate.New()
 	if err != nil {
