@@ -5,6 +5,9 @@ grpc:
     addr: ${GRPC_ADDR}
     reflection: ${GRPC_REFLECTION:-false}
 
+auth_service:
+    addr: "${AUTH_SERVICE_ADDR}"
+
 postgres:
     dsn: "${POSTGRES_DSN}"
     max_conns: 10

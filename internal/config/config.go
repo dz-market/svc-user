@@ -9,15 +9,20 @@ type Config struct {
 	ServiceName     string        `validate:"required" yaml:"service_name"`
 	ShutdownTimeout time.Duration `validate:"required" yaml:"shutdown_timeout"`
 
-	GRPC     GRPC     `yaml:"grpc"`
-	Postgres Postgres `yaml:"postgres"`
-	Kafka    Kafka    `yaml:"kafka"`
-	Log      Log      `yaml:"log"`
+	GRPC        GRPC        `yaml:"grpc"`
+	AuthService AuthService `yaml:"auth_service"`
+	Postgres    Postgres    `yaml:"postgres"`
+	Kafka       Kafka       `yaml:"kafka"`
+	Log         Log         `yaml:"log"`
 }
 
 type GRPC struct {
 	Addr       string `validate:"required" yaml:"addr"`
 	Reflection bool   `yaml:"reflection"`
+}
+
+type AuthService struct {
+	Addr string `validate:"required" yaml:"addr"`
 }
 
 type Postgres struct {
