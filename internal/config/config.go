@@ -20,7 +20,7 @@ type Config struct {
 }
 
 type GRPC struct {
-	Addr           string           `validate:"required" yaml:"addr"`
+	Addr           string           `validate:"required"                          yaml:"addr"`
 	Reflection     bool             `yaml:"reflection"`
 	MaxRecvMsgSize pconfig.ByteSize `validate:"required,minsize=1KB,maxsize=64MB" yaml:"max_recv_msg_size"`
 

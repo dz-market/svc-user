@@ -20,7 +20,7 @@ import (
 	"github.com/dz-market/svc-user/internal/application/user"
 	"github.com/dz-market/svc-user/internal/config"
 	"github.com/dz-market/svc-user/internal/delivery/event/kafka/consumer"
-	kafkaHandler "github.com/dz-market/svc-user/internal/delivery/event/kafka/handler"
+	kafkahandler "github.com/dz-market/svc-user/internal/delivery/event/kafka/handler"
 	"github.com/dz-market/svc-user/internal/delivery/grpc/handler"
 	"github.com/dz-market/svc-user/internal/delivery/grpc/server"
 	"github.com/dz-market/svc-user/internal/infrastructure/client/auth"
@@ -114,7 +114,7 @@ func Run(ctx context.Context, version string) error {
 	)
 
 	handlers := map[string]consumer.Handler{
-		cfg.Kafka.Topics.UserRegistered: kafkaHandler.NewUserRegistered(userService, log),
+		cfg.Kafka.Topics.UserRegistered: kafkahandler.NewUserRegistered(userService, log),
 	}
 
 	kafkaConsumerClient, err := kafka.NewConsumerClient(
