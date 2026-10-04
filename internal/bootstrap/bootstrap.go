@@ -11,16 +11,22 @@ import (
 	"slices"
 	"syscall"
 
+	"buf.build/go/protovalidate"
 	"golang.org/x/sync/errgroup"
+
+	userv1 "github.com/dz-market/protobuf/gen/go/user/api/v1"
 
 	"github.com/dz-market/svc-user/internal/application/user"
 	"github.com/dz-market/svc-user/internal/config"
 	"github.com/dz-market/svc-user/internal/delivery/event/kafka/consumer"
-	"github.com/dz-market/svc-user/internal/delivery/event/kafka/handler"
+	kafkaHandler "github.com/dz-market/svc-user/internal/delivery/event/kafka/handler"
+	"github.com/dz-market/svc-user/internal/delivery/grpc/handler"
 	"github.com/dz-market/svc-user/internal/delivery/grpc/server"
+	"github.com/dz-market/svc-user/internal/infrastructure/client/auth"
 	"github.com/dz-market/svc-user/internal/infrastructure/messaging/kafka"
 	logger "github.com/dz-market/svc-user/internal/infrastructure/observability/logger/slog"
 	"github.com/dz-market/svc-user/internal/infrastructure/persistence/postgres"
+	"github.com/dz-market/svc-user/internal/infrastructure/security/jwt"
 )
 
 func Run(ctx context.Context, version string) error {
@@ -69,6 +75,35 @@ func Run(ctx context.Context, version string) error {
 
 	defer db.Close()
 
+	authClient, err := auth.New(
+		auth.Options{
+			Addr: cfg.AuthService.Addr,
+		},
+	)
+	if err != nil {
+		return fmt.Errorf("auth client: %w", err)
+	}
+
+	defer func() {
+		if err := authClient.Close(); err != nil {
+			log.ErrorContext(
+				ctx, "close auth client",
+				slog.Any("err", err),
+			)
+
+			return
+		}
+
+		log.InfoContext(ctx, "auth client closed")
+	}()
+
+	publicKey, err := authClient.GetPublicKey(ctx)
+	if err != nil {
+		return fmt.Errorf("get auth public key: %w", err)
+	}
+
+	verifier := jwt.NewVerifier(publicKey)
+
 	profileRepo := postgres.NewProfileRepository(db)
 
 	userService := user.NewService(
@@ -78,7 +113,7 @@ func Run(ctx context.Context, version string) error {
 	)
 
 	handlers := map[string]consumer.Handler{
-		cfg.Kafka.Topics.UserRegistered: handler.NewUserRegistered(userService, log),
+		cfg.Kafka.Topics.UserRegistered: kafkaHandler.NewUserRegistered(userService, log),
 	}
 
 	kafkaConsumerClient, err := kafka.NewConsumerClient(
@@ -104,13 +139,32 @@ func Run(ctx context.Context, version string) error {
 
 	defer kafkaConsumerClient.Close()
 
+	validator, err := protovalidate.New()
+	if err != nil {
+		return fmt.Errorf("create protovalidate validator: %w", err)
+	}
+
 	srv := server.New(
 		server.Options{
-			Addr:            cfg.GRPC.Addr,
-			Reflection:      cfg.GRPC.Reflection,
-			ShutdownTimeout: cfg.ShutdownTimeout,
+			Addr:                  cfg.GRPC.Addr,
+			Reflection:            cfg.GRPC.Reflection,
+			MaxRecvMsgSize:        cfg.GRPC.MaxRecvMsgSize.Bytes(),
+			MaxConnectionAge:      cfg.GRPC.Keepalive.MaxConnectionAge,
+			MaxConnectionAgeGrace: cfg.GRPC.Keepalive.MaxConnectionAgeGrace,
+			ShutdownTimeout:       cfg.ShutdownTimeout,
+			Validator:             validator,
+			Verifier:              verifier,
 		},
 		log,
+	)
+
+	userv1.RegisterProfileServiceServer(
+		srv.Registrar(), handler.NewProfile(
+			handler.Options{
+				Service: userService,
+				Log:     log,
+			},
+		),
 	)
 
 	g, ctx := errgroup.WithContext(ctx)
