@@ -15,6 +15,7 @@ type Config struct {
 	AuthService AuthService `yaml:"auth_service"`
 	Postgres    Postgres    `yaml:"postgres"`
 	Kafka       Kafka       `yaml:"kafka"`
+	Health      Health      `yaml:"health"`
 	Log         Log         `yaml:"log"`
 }
 
@@ -53,6 +54,11 @@ type Kafka struct {
 
 type Topics struct {
 	UserRegistered string `yaml:"user_registered"`
+}
+
+type Health struct {
+	Period  time.Duration `validate:"required" yaml:"period"`
+	Timeout time.Duration `validate:"required" yaml:"timeout"`
 }
 
 type Log struct {

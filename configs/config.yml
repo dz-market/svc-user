@@ -27,6 +27,10 @@ kafka:
     topics:
         user_registered: "${KAFKA_TOPIC_USER_REGISTERED:-auth.user-registered.v1}"
 
+health:
+    period: 5s
+    timeout: 2s
+
 log:
     level: info
     format: text
