@@ -3,6 +3,8 @@ package config
 import (
 	"log/slog"
 	"time"
+
+	pconfig "github.com/dz-market/platform/config"
 )
 
 type Config struct {
@@ -17,8 +19,16 @@ type Config struct {
 }
 
 type GRPC struct {
-	Addr       string `validate:"required" yaml:"addr"`
-	Reflection bool   `yaml:"reflection"`
+	Addr           string           `validate:"required" yaml:"addr"`
+	Reflection     bool             `yaml:"reflection"`
+	MaxRecvMsgSize pconfig.ByteSize `validate:"required,minsize=1KB,maxsize=64MB" yaml:"max_recv_msg_size"`
+
+	Keepalive Keepalive `yaml:"keepalive"`
+}
+
+type Keepalive struct {
+	MaxConnectionAge      time.Duration `validate:"required" yaml:"max_connection_age"`
+	MaxConnectionAgeGrace time.Duration `validate:"required" yaml:"max_connection_age_grace"`
 }
 
 type AuthService struct {
