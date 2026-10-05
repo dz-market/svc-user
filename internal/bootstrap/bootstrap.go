@@ -172,8 +172,8 @@ func Run(ctx context.Context, version string) error {
 		log,
 	)
 
-	userv1.RegisterProfileServiceServer(
-		srv.Registrar(), handler.NewProfile(
+	userv1.RegisterUserServiceServer(
+		srv.Registrar(), handler.NewUser(
 			handler.Options{
 				Service: userService,
 				Log:     log,

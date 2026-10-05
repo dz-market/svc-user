@@ -21,21 +21,21 @@ type Options struct {
 	Log     *slog.Logger
 }
 
-type Profile struct {
-	userv1.UnimplementedProfileServiceServer
+type User struct {
+	userv1.UnimplementedUserServiceServer
 
 	service UserService
 	log     *slog.Logger
 }
 
-func NewProfile(opts Options) *Profile {
-	return &Profile{
+func NewUser(opts Options) *User {
+	return &User{
 		service: opts.Service,
 		log:     opts.Log,
 	}
 }
 
-func (h *Profile) GetMe(ctx context.Context, _ *userv1.GetMeRequest) (*userv1.GetMeResponse, error) {
+func (h *User) GetMe(ctx context.Context, _ *userv1.GetMeRequest) (*userv1.GetMeResponse, error) {
 	userID, ok := identity.UserID(ctx)
 	if !ok {
 		h.log.ErrorContext(ctx, "identity is missing from the context")
@@ -55,10 +55,10 @@ func (h *Profile) GetMe(ctx context.Context, _ *userv1.GetMeRequest) (*userv1.Ge
 	return mapper.ToGetMeResponse(out), nil
 }
 
-func (h *Profile) toStatus(ctx context.Context, err error) error {
+func (h *User) toStatus(ctx context.Context, err error) error {
 	switch {
 	case errors.Is(err, profile.ErrNotFound):
-		return status.Error(codes.NotFound, "profile not found")
+		return status.Error(codes.NotFound, "user profile not found")
 
 	default:
 		h.log.ErrorContext(

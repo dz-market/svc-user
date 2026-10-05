@@ -42,7 +42,7 @@ type Server struct {
 
 func New(opts Options, log *slog.Logger) *Server {
 	protectedMethods := []string{
-		userv1.ProfileService_GetMe_FullMethodName,
+		userv1.UserService_GetMe_FullMethodName,
 	}
 
 	auth := selector.UnaryServerInterceptor(
