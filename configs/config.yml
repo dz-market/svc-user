@@ -2,18 +2,18 @@ service_name: svc-user
 shutdown_timeout: 10s
 
 grpc:
-    addr: ${GRPC_ADDR}
-    reflection: ${GRPC_REFLECTION:-false}
+    addr: "${env:GRPC_ADDR}"
+    reflection: "${env:GRPC_REFLECTION:-false}"
     max_recv_msg_size: 1MB
     keepalive:
         max_connection_age: 30m
         max_connection_age_grace: 10m
 
 auth_service:
-    addr: "${AUTH_SERVICE_ADDR}"
+    addr: "${env:AUTH_SERVICE_ADDR}"
 
 postgres:
-    dsn: "${POSTGRES_DSN}"
+    dsn: "${env:POSTGRES_DSN}"
     max_conns: 10
     min_conns: 2
     max_conn_lifetime: 1h
@@ -23,9 +23,9 @@ postgres:
     ping_timeout: 2s
 
 kafka:
-    brokers: ["${KAFKA_BROKERS}"]
+    brokers: ["${env:KAFKA_BROKERS}"]
     topics:
-        user_registered: "${KAFKA_TOPIC_USER_REGISTERED:-auth.user-registered.v1}"
+        user_registered: "${env:KAFKA_TOPIC_USER_REGISTERED:-auth.user-registered.v1}"
 
 health:
     period: 5s
