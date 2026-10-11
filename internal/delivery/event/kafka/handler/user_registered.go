@@ -71,12 +71,13 @@ func (h *UserRegistered) Handle(ctx context.Context, msg consumer.Message) error
 		return nil
 	}
 
-	if err := h.userService.CreateProfile(
+	err = h.userService.CreateProfile(
 		ctx, user.CreateProfileInput{
 			UserID:       userID,
 			RegisteredAt: registeredAt.AsTime(),
 		},
-	); err != nil {
+	)
+	if err != nil {
 		return fmt.Errorf("create profile: %w", err)
 	}
 

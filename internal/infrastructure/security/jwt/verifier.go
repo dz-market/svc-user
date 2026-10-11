@@ -30,11 +30,12 @@ func NewVerifier(key *rsa.PublicKey) *Verifier {
 func (v *Verifier) Verify(token string) (uuid.UUID, error) {
 	var claims Claims
 
-	if _, err := v.parser.ParseWithClaims(
+	_, err := v.parser.ParseWithClaims(
 		token, &claims, func(*jwtgo.Token) (any, error) {
 			return v.key, nil
 		},
-	); err != nil {
+	)
+	if err != nil {
 		return uuid.Nil(), fmt.Errorf("invalid token: %w", err)
 	}
 
