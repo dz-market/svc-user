@@ -49,9 +49,10 @@ func (r *ProfileRepository) ByUserID(ctx context.Context, userID uuid.UUID) (pro
 
 	var p profile.Profile
 
-	if err := r.q.
+	err := r.q.
 		QueryRow(ctx, query, userID).
-		Scan(&p.UserID, &p.CreatedAt); err != nil {
+		Scan(&p.UserID, &p.CreatedAt)
+	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return profile.Profile{}, profile.ErrNotFound
 		}
