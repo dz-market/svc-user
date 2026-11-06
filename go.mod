@@ -11,7 +11,7 @@ require (
 	github.com/jackc/pgx/v5 v5.12.0
 	github.com/twmb/franz-go v1.22.2
 	golang.org/x/sync v0.24.0
-	google.golang.org/grpc v1.83.2
+	google.golang.org/grpc v1.85.0
 	google.golang.org/protobuf v1.36.12
 )
 
@@ -36,9 +36,6 @@ require (
 	github.com/leodido/go-urn v1.5.0 // indirect
 	github.com/pierrec/lz4/v4 v4.1.33 // indirect
 	github.com/twmb/franz-go/pkg/kmsg v1.15.0 // indirect
-	go.opentelemetry.io/otel/metric v1.45.0 // indirect
-	go.opentelemetry.io/otel/sdk v1.45.0 // indirect
-	go.opentelemetry.io/otel/trace v1.45.0 // indirect
 	go.yaml.in/yaml/v3 v3.0.5 // indirect
 	golang.org/x/crypto v0.57.0 // indirect
 	golang.org/x/exp v0.0.0-20260820142414-ca536658362e // indirect
