@@ -2,9 +2,10 @@
 
 # User Service
 
-User profiles and personal data
+User profiles and personal data.
 
 [![CI](https://github.com/dz-market/svc-user/actions/workflows/ci.yml/badge.svg)](https://github.com/dz-market/svc-user/actions/workflows/ci.yml)
+[![Coverage](https://img.shields.io/codecov/c/github/dz-market/svc-user/main)](https://app.codecov.io/gh/dz-market/svc-user)
 [![Go version](https://img.shields.io/github/go-mod/go-version/dz-market/svc-user)](go.mod)
 [![Release](https://img.shields.io/github/v/release/dz-market/svc-user)](https://github.com/dz-market/svc-user/releases)
 [![License](https://img.shields.io/github/license/dz-market/svc-user)](LICENSE)
