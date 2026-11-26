@@ -8,9 +8,9 @@ require (
 	github.com/dz-market/protobuf v0.6.2
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/grpc-ecosystem/go-grpc-middleware/v2 v2.3.4
-	github.com/jackc/pgx/v5 v5.12.0
+	github.com/jackc/pgx/v5 v5.13.0
 	github.com/twmb/franz-go v1.22.3
-	golang.org/x/sync v0.24.0
+	golang.org/x/sync v0.25.0
 	google.golang.org/grpc v1.85.0
 	google.golang.org/protobuf v1.36.12
 )
