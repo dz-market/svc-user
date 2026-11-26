@@ -1,10 +1,10 @@
 service_name: svc-user
-shutdown_timeout: 10s
 
 grpc:
     addr: "${env:GRPC_ADDR}"
     reflection: "${env:GRPC_REFLECTION:-false}"
     max_recv_msg_size: 1MB
+    shutdown_timeout: 10s
     keepalive:
         max_connection_age: 30m
         max_connection_age_grace: 10m

@@ -14,7 +14,9 @@ import (
 	"buf.build/go/protovalidate"
 	"golang.org/x/sync/errgroup"
 
-	"github.com/dz-market/platform/health"
+	ppostgres "github.com/dz-market/platform/database/postgres"
+	phealth "github.com/dz-market/platform/grpc/health"
+	plogger "github.com/dz-market/platform/logger"
 	userv1 "github.com/dz-market/protobuf/gen/go/user/api/v1"
 
 	"github.com/dz-market/svc-user/internal/application/user"
@@ -25,7 +27,6 @@ import (
 	"github.com/dz-market/svc-user/internal/delivery/grpc/server"
 	"github.com/dz-market/svc-user/internal/infrastructure/client/auth"
 	"github.com/dz-market/svc-user/internal/infrastructure/messaging/kafka"
-	logger "github.com/dz-market/svc-user/internal/infrastructure/observability/logger/slog"
 	"github.com/dz-market/svc-user/internal/infrastructure/persistence/postgres"
 	"github.com/dz-market/svc-user/internal/infrastructure/security/jwt"
 )
@@ -39,14 +40,20 @@ func Run(ctx context.Context, version string) error {
 		return fmt.Errorf("load config: %w", err)
 	}
 
-	log := logger.New(
-		logger.Options{
-			Level:   cfg.Log.Level,
-			Format:  cfg.Log.Format,
+	log, err := plogger.New(
+		plogger.Options{
+			Format: plogger.Format(cfg.Log.Format),
+			HandlerOptions: slog.HandlerOptions{
+				Level: cfg.Log.Level,
+			},
 			Service: cfg.ServiceName,
 			Version: version,
 		},
 	)
+	if err != nil {
+		return fmt.Errorf("create logger: %w", err)
+	}
+
 	log.DebugContext(ctx, "configuration loaded")
 
 	log.InfoContext(
@@ -57,24 +64,23 @@ func Run(ctx context.Context, version string) error {
 		slog.String("log_level", cfg.Log.Level.String()),
 	)
 
-	db, err := postgres.New(
-		ctx, postgres.Options{
-			AppName:           cfg.ServiceName,
-			DSN:               cfg.Postgres.DSN,
-			MaxConns:          cfg.Postgres.MaxConns,
-			MinConns:          cfg.Postgres.MinConns,
-			MaxConnLifetime:   cfg.Postgres.MaxConnLifetime,
-			MaxConnIdleTime:   cfg.Postgres.MaxConnIdleTime,
-			HealthCheckPeriod: cfg.Postgres.HealthCheckPeriod,
-			ConnectTimeout:    cfg.Postgres.ConnectTimeout,
-			PingTimeout:       cfg.Postgres.PingTimeout,
-		}, log,
+	postgresPool, err := ppostgres.New(
+		ctx, ppostgres.Options{
+			DSN:                cfg.Postgres.DSN,
+			MaxConns:           &cfg.Postgres.MaxConns,
+			MinConns:           &cfg.Postgres.MinConns,
+			MaxConnLifetime:    &cfg.Postgres.MaxConnLifetime,
+			MaxConnIdleTime:    &cfg.Postgres.MaxConnIdleTime,
+			HealthCheckPeriod:  &cfg.Postgres.HealthCheckPeriod,
+			ConnectTimeout:     &cfg.Postgres.ConnectTimeout,
+			ApplicationName:    &cfg.ServiceName,
+			InitialPingTimeout: &cfg.Postgres.PingTimeout,
+		},
 	)
 	if err != nil {
-		return fmt.Errorf("postgres: %w", err)
+		return fmt.Errorf("open postgres pool: %w", err)
 	}
-
-	defer db.Close()
+	defer postgresPool.Close()
 
 	authClient, err := auth.New(
 		auth.Options{
@@ -105,7 +111,7 @@ func Run(ctx context.Context, version string) error {
 
 	verifier := jwt.NewVerifier(publicKey)
 
-	profileRepo := postgres.NewProfileRepository(db)
+	profileRepo := postgres.NewProfileRepository(postgresPool)
 
 	userService := user.NewService(
 		user.Options{
@@ -137,55 +143,70 @@ func Run(ctx context.Context, version string) error {
 			Log:      log,
 		},
 	)
-
 	defer kafkaConsumerClient.Close()
-
-	checker := health.New(
-		health.Options{
-			Period:  cfg.Health.Period,
-			Timeout: cfg.Health.Timeout,
-		}, log,
-	)
-	checker.Register("postgres", db.Ping)
-	checker.Register(
-		"kafka", func(ctx context.Context) error {
-			return kafkaConsumerClient.Ping(ctx)
-		},
-	)
 
 	validator, err := protovalidate.New()
 	if err != nil {
-		return fmt.Errorf("create protovalidate validator: %w", err)
+		return fmt.Errorf("protovalidate: %w", err)
 	}
 
-	srv := server.New(
+	grpcSrv := server.New(
 		server.Options{
 			Addr:                  cfg.GRPC.Addr,
 			Reflection:            cfg.GRPC.Reflection,
 			MaxRecvMsgSize:        cfg.GRPC.MaxRecvMsgSize.Bytes(),
 			MaxConnectionAge:      cfg.GRPC.Keepalive.MaxConnectionAge,
 			MaxConnectionAgeGrace: cfg.GRPC.Keepalive.MaxConnectionAgeGrace,
-			ShutdownTimeout:       cfg.ShutdownTimeout,
+			ShutdownTimeout:       cfg.GRPC.ShutdownTimeout,
 			Validator:             validator,
 			Verifier:              verifier,
 		},
 		log,
 	)
 
-	userv1.RegisterUserServiceServer(
-		srv.Registrar(), handler.NewUser(
-			handler.Options{
-				Service: userService,
-				Log:     log,
-			},
-		),
+	userHandler := handler.NewUser(
+		handler.Options{
+			Service: userService,
+			Log:     log,
+		},
 	)
+
+	userv1.RegisterUserServiceServer(grpcSrv.Registrar(), userHandler)
+
+	checker, err := phealth.New(
+		grpcSrv.Registrar(), phealth.Options{
+			Period:  cfg.Health.Period,
+			Timeout: cfg.Health.Timeout,
+		},
+	)
+	if err != nil {
+		return fmt.Errorf("create grpc health checker: %w", err)
+	}
+
+	if err := checker.Register("postgres", phealth.DependencyOptions{}, postgresPool.Ping); err != nil {
+		return fmt.Errorf("register postgres health check: %w", err)
+	}
 
 	g, ctx := errgroup.WithContext(ctx)
 
 	g.Go(
 		func() error {
-			return srv.Run(ctx)
+			return checker.Run(ctx)
+		},
+	)
+
+	g.Go(
+		func() error {
+			return grpcSrv.Run(
+				ctx, func() {
+					shutdownCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), cfg.Health.Timeout)
+					defer cancel()
+
+					if err := checker.Shutdown(shutdownCtx); err != nil {
+						log.WarnContext(shutdownCtx, "grpc health shutdown failed", slog.Any("err", err))
+					}
+				},
+			)
 		},
 	)
 
