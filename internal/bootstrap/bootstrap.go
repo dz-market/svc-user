@@ -11,20 +11,13 @@ import (
 	"slices"
 	"syscall"
 
-	"buf.build/go/protovalidate"
-	"golang.org/x/sync/errgroup"
-
 	ppostgres "github.com/dz-market/platform/database/postgres"
-	phealth "github.com/dz-market/platform/grpc/health"
 	plogger "github.com/dz-market/platform/logger"
-	userv1 "github.com/dz-market/protobuf/gen/go/user/api/v1"
 
 	"github.com/dz-market/svc-user/internal/application/user"
 	"github.com/dz-market/svc-user/internal/config"
 	"github.com/dz-market/svc-user/internal/delivery/event/kafka/consumer"
 	kafkahandler "github.com/dz-market/svc-user/internal/delivery/event/kafka/handler"
-	"github.com/dz-market/svc-user/internal/delivery/grpc/handler"
-	"github.com/dz-market/svc-user/internal/delivery/grpc/server"
 	"github.com/dz-market/svc-user/internal/infrastructure/client/auth"
 	"github.com/dz-market/svc-user/internal/infrastructure/messaging/kafka"
 	"github.com/dz-market/svc-user/internal/infrastructure/persistence/postgres"
@@ -57,7 +50,6 @@ func Run(ctx context.Context, version string) error {
 	}
 
 	log.DebugContext(ctx, "configuration loaded")
-
 	log.InfoContext(
 		ctx, "service starting",
 		slog.String("go_version", runtime.Version()),
@@ -137,6 +129,7 @@ func Run(ctx context.Context, version string) error {
 	if err != nil {
 		return fmt.Errorf("kafka client: %w", err)
 	}
+	defer kafkaConsumerClient.Close()
 
 	kafkaConsumer := consumer.New(
 		consumer.Options{
@@ -145,84 +138,19 @@ func Run(ctx context.Context, version string) error {
 			Log:      log,
 		},
 	)
-	defer kafkaConsumerClient.Close()
 
-	validator, err := protovalidate.New()
+	grpcSrv, checker, err := buildGRPC(cfg, userService, verifier, postgresPool.Ping, log)
 	if err != nil {
-		return fmt.Errorf("protovalidate: %w", err)
-	}
-
-	grpcSrv := server.New(
-		server.Options{
-			Addr:                  cfg.GRPC.Addr,
-			Reflection:            cfg.GRPC.Reflection,
-			MaxRecvMsgSize:        cfg.GRPC.MaxRecvMsgSize.Bytes(),
-			MaxConnectionAge:      cfg.GRPC.Keepalive.MaxConnectionAge,
-			MaxConnectionAgeGrace: cfg.GRPC.Keepalive.MaxConnectionAgeGrace,
-			ShutdownTimeout:       cfg.GRPC.ShutdownTimeout,
-			Validator:             validator,
-			Verifier:              verifier,
-		},
-		log,
-	)
-
-	userHandler := handler.NewUser(
-		handler.Options{
-			Service: userService,
-			Log:     log,
-		},
-	)
-
-	userv1.RegisterUserServiceServer(grpcSrv.Registrar(), userHandler)
-
-	checker, err := phealth.New(
-		grpcSrv.Registrar(), phealth.Options{
-			Period:  cfg.Health.Period,
-			Timeout: cfg.Health.Timeout,
-		},
-	)
-	if err != nil {
-		return fmt.Errorf("create grpc health checker: %w", err)
-	}
-
-	if err := checker.Register("postgres", phealth.DependencyOptions{}, postgresPool.Ping); err != nil {
-		return fmt.Errorf("register postgres health check: %w", err)
-	}
-
-	g, ctx := errgroup.WithContext(ctx)
-
-	g.Go(
-		func() error {
-			return checker.Run(ctx)
-		},
-	)
-
-	g.Go(
-		func() error {
-			return grpcSrv.Run(
-				ctx, func() {
-					shutdownCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), cfg.Health.Timeout)
-					defer cancel()
-
-					if err := checker.Shutdown(shutdownCtx); err != nil {
-						log.WarnContext(shutdownCtx, "grpc health shutdown failed", slog.Any("err", err))
-					}
-				},
-			)
-		},
-	)
-
-	g.Go(
-		func() error {
-			return kafkaConsumer.Run(ctx)
-		},
-	)
-
-	if err := g.Wait(); err != nil {
 		return err
 	}
 
-	log.InfoContext(ctx, "service stopped")
+	application := app{
+		grpcServer:    grpcSrv,
+		checker:       checker,
+		kafkaConsumer: kafkaConsumer,
+		healthTimeout: cfg.Health.Timeout,
+		log:           log,
+	}
 
-	return nil
+	return application.run(ctx)
 }
