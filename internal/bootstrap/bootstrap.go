@@ -11,24 +11,20 @@ import (
 	"slices"
 	"syscall"
 
-	"buf.build/go/protovalidate"
-	"golang.org/x/sync/errgroup"
-
-	"github.com/dz-market/platform/health"
-	userv1 "github.com/dz-market/protobuf/gen/go/user/api/v1"
+	ppostgres "github.com/dz-market/platform/database/postgres"
+	plogger "github.com/dz-market/platform/logger"
 
 	"github.com/dz-market/svc-user/internal/application/user"
 	"github.com/dz-market/svc-user/internal/config"
 	"github.com/dz-market/svc-user/internal/delivery/event/kafka/consumer"
 	kafkahandler "github.com/dz-market/svc-user/internal/delivery/event/kafka/handler"
-	"github.com/dz-market/svc-user/internal/delivery/grpc/handler"
-	"github.com/dz-market/svc-user/internal/delivery/grpc/server"
 	"github.com/dz-market/svc-user/internal/infrastructure/client/auth"
 	"github.com/dz-market/svc-user/internal/infrastructure/messaging/kafka"
-	logger "github.com/dz-market/svc-user/internal/infrastructure/observability/logger/slog"
 	"github.com/dz-market/svc-user/internal/infrastructure/persistence/postgres"
 	"github.com/dz-market/svc-user/internal/infrastructure/security/jwt"
 )
+
+const userRegisteredTopic = "auth.user-registered.v1"
 
 func Run(ctx context.Context, version string) error {
 	ctx, stop := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
@@ -39,16 +35,21 @@ func Run(ctx context.Context, version string) error {
 		return fmt.Errorf("load config: %w", err)
 	}
 
-	log := logger.New(
-		logger.Options{
-			Level:   cfg.Log.Level,
-			Format:  cfg.Log.Format,
+	log, err := plogger.New(
+		plogger.Options{
+			Format: plogger.Format(cfg.Log.Format),
+			HandlerOptions: slog.HandlerOptions{
+				Level: cfg.Log.Level,
+			},
 			Service: cfg.ServiceName,
 			Version: version,
 		},
 	)
-	log.DebugContext(ctx, "configuration loaded")
+	if err != nil {
+		return fmt.Errorf("create logger: %w", err)
+	}
 
+	log.DebugContext(ctx, "configuration loaded")
 	log.InfoContext(
 		ctx, "service starting",
 		slog.String("go_version", runtime.Version()),
@@ -57,24 +58,23 @@ func Run(ctx context.Context, version string) error {
 		slog.String("log_level", cfg.Log.Level.String()),
 	)
 
-	db, err := postgres.New(
-		ctx, postgres.Options{
-			AppName:           cfg.ServiceName,
-			DSN:               cfg.Postgres.DSN,
-			MaxConns:          cfg.Postgres.MaxConns,
-			MinConns:          cfg.Postgres.MinConns,
-			MaxConnLifetime:   cfg.Postgres.MaxConnLifetime,
-			MaxConnIdleTime:   cfg.Postgres.MaxConnIdleTime,
-			HealthCheckPeriod: cfg.Postgres.HealthCheckPeriod,
-			ConnectTimeout:    cfg.Postgres.ConnectTimeout,
-			PingTimeout:       cfg.Postgres.PingTimeout,
-		}, log,
+	postgresPool, err := ppostgres.New(
+		ctx, ppostgres.Options{
+			DSN:                cfg.Postgres.DSN,
+			MaxConns:           &cfg.Postgres.MaxConns,
+			MinConns:           &cfg.Postgres.MinConns,
+			MaxConnLifetime:    &cfg.Postgres.MaxConnLifetime,
+			MaxConnIdleTime:    &cfg.Postgres.MaxConnIdleTime,
+			HealthCheckPeriod:  &cfg.Postgres.HealthCheckPeriod,
+			ConnectTimeout:     &cfg.Postgres.ConnectTimeout,
+			ApplicationName:    &cfg.ServiceName,
+			InitialPingTimeout: &cfg.Postgres.PingTimeout,
+		},
 	)
 	if err != nil {
-		return fmt.Errorf("postgres: %w", err)
+		return fmt.Errorf("open postgres pool: %w", err)
 	}
-
-	defer db.Close()
+	defer postgresPool.Close()
 
 	authClient, err := auth.New(
 		auth.Options{
@@ -105,7 +105,7 @@ func Run(ctx context.Context, version string) error {
 
 	verifier := jwt.NewVerifier(publicKey)
 
-	profileRepo := postgres.NewProfileRepository(db)
+	profileRepo := postgres.NewProfileRepository(postgresPool)
 
 	userService := user.NewService(
 		user.Options{
@@ -114,7 +114,7 @@ func Run(ctx context.Context, version string) error {
 	)
 
 	handlers := map[string]consumer.Handler{
-		cfg.Kafka.Topics.UserRegistered: kafkahandler.NewUserRegistered(userService, log),
+		userRegisteredTopic: kafkahandler.NewUserRegistered(userService, log),
 	}
 
 	kafkaConsumerClient, err := kafka.NewConsumerClient(
@@ -129,6 +129,7 @@ func Run(ctx context.Context, version string) error {
 	if err != nil {
 		return fmt.Errorf("kafka client: %w", err)
 	}
+	defer kafkaConsumerClient.Close()
 
 	kafkaConsumer := consumer.New(
 		consumer.Options{
@@ -138,68 +139,18 @@ func Run(ctx context.Context, version string) error {
 		},
 	)
 
-	defer kafkaConsumerClient.Close()
-
-	checker := health.New(
-		health.Options{
-			Period:  cfg.Health.Period,
-			Timeout: cfg.Health.Timeout,
-		}, log,
-	)
-	checker.Register("postgres", db.Ping)
-	checker.Register(
-		"kafka", func(ctx context.Context) error {
-			return kafkaConsumerClient.Ping(ctx)
-		},
-	)
-
-	validator, err := protovalidate.New()
+	grpcSrv, checker, err := buildGRPC(cfg, userService, verifier, postgresPool.Ping, log)
 	if err != nil {
-		return fmt.Errorf("create protovalidate validator: %w", err)
-	}
-
-	srv := server.New(
-		server.Options{
-			Addr:                  cfg.GRPC.Addr,
-			Reflection:            cfg.GRPC.Reflection,
-			MaxRecvMsgSize:        cfg.GRPC.MaxRecvMsgSize.Bytes(),
-			MaxConnectionAge:      cfg.GRPC.Keepalive.MaxConnectionAge,
-			MaxConnectionAgeGrace: cfg.GRPC.Keepalive.MaxConnectionAgeGrace,
-			ShutdownTimeout:       cfg.ShutdownTimeout,
-			Validator:             validator,
-			Verifier:              verifier,
-		},
-		log,
-	)
-
-	userv1.RegisterUserServiceServer(
-		srv.Registrar(), handler.NewUser(
-			handler.Options{
-				Service: userService,
-				Log:     log,
-			},
-		),
-	)
-
-	g, ctx := errgroup.WithContext(ctx)
-
-	g.Go(
-		func() error {
-			return srv.Run(ctx)
-		},
-	)
-
-	g.Go(
-		func() error {
-			return kafkaConsumer.Run(ctx)
-		},
-	)
-
-	if err := g.Wait(); err != nil {
 		return err
 	}
 
-	log.InfoContext(ctx, "service stopped")
+	application := app{
+		grpcServer:    grpcSrv,
+		checker:       checker,
+		kafkaConsumer: kafkaConsumer,
+		healthTimeout: cfg.Health.Timeout,
+		log:           log,
+	}
 
-	return nil
+	return application.run(ctx)
 }

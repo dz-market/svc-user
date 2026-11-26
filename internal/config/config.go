@@ -8,8 +8,7 @@ import (
 )
 
 type Config struct {
-	ServiceName     string        `validate:"required" yaml:"service_name"`
-	ShutdownTimeout time.Duration `validate:"required" yaml:"shutdown_timeout"`
+	ServiceName string `validate:"required" yaml:"service_name"`
 
 	GRPC        GRPC        `yaml:"grpc"`
 	AuthService AuthService `yaml:"auth_service"`
@@ -20,9 +19,10 @@ type Config struct {
 }
 
 type GRPC struct {
-	Addr           string           `validate:"required"                          yaml:"addr"`
-	Reflection     bool             `yaml:"reflection"`
-	MaxRecvMsgSize pconfig.ByteSize `validate:"required,minsize=1KB,maxsize=64MB" yaml:"max_recv_msg_size"`
+	Addr            string           `validate:"required"                          yaml:"addr"`
+	Reflection      bool             `yaml:"reflection"`
+	MaxRecvMsgSize  pconfig.ByteSize `validate:"required,minsize=1KB,maxsize=64MB" yaml:"max_recv_msg_size"`
+	ShutdownTimeout time.Duration    `validate:"required"                          yaml:"shutdown_timeout"`
 
 	Keepalive Keepalive `yaml:"keepalive"`
 }
@@ -37,28 +37,23 @@ type AuthService struct {
 }
 
 type Postgres struct {
-	DSN               string        `validate:"required"        yaml:"dsn"`
-	MaxConns          int32         `yaml:"max_conns"`
-	MinConns          int32         `yaml:"min_conns"`
-	MaxConnLifetime   time.Duration `yaml:"max_conn_lifetime"`
-	MaxConnIdleTime   time.Duration `yaml:"max_conn_idle_time"`
-	HealthCheckPeriod time.Duration `yaml:"health_check_period"`
-	ConnectTimeout    time.Duration `yaml:"connect_timeout"`
-	PingTimeout       time.Duration `yaml:"ping_timeout"`
+	DSN               string        `validate:"required"               yaml:"dsn"`
+	MaxConns          int32         `validate:"gt=0"                   yaml:"max_conns"`
+	MinConns          int32         `validate:"gt=0,ltefield=MaxConns" yaml:"min_conns"`
+	MaxConnLifetime   time.Duration `validate:"gt=0"                   yaml:"max_conn_lifetime"`
+	MaxConnIdleTime   time.Duration `validate:"gt=0"                   yaml:"max_conn_idle_time"`
+	HealthCheckPeriod time.Duration `validate:"gt=0"                   yaml:"health_check_period"`
+	ConnectTimeout    time.Duration `validate:"gt=0"                   yaml:"connect_timeout"`
+	PingTimeout       time.Duration `validate:"gt=0"                   yaml:"ping_timeout"`
 }
 
 type Kafka struct {
 	Brokers []string `validate:"required,min=1,dive,required" yaml:"brokers"`
-	Topics  Topics   `yaml:"topics"`
-}
-
-type Topics struct {
-	UserRegistered string `yaml:"user_registered"`
 }
 
 type Health struct {
-	Period  time.Duration `validate:"required" yaml:"period"`
-	Timeout time.Duration `validate:"required" yaml:"timeout"`
+	Period  time.Duration `validate:"gt=0" yaml:"period"`
+	Timeout time.Duration `validate:"gt=0" yaml:"timeout"`
 }
 
 type Log struct {
