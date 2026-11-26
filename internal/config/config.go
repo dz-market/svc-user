@@ -49,11 +49,6 @@ type Postgres struct {
 
 type Kafka struct {
 	Brokers []string `validate:"required,min=1,dive,required" yaml:"brokers"`
-	Topics  Topics   `yaml:"topics"`
-}
-
-type Topics struct {
-	UserRegistered string `yaml:"user_registered"`
 }
 
 type Health struct {

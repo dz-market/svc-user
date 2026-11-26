@@ -31,6 +31,8 @@ import (
 	"github.com/dz-market/svc-user/internal/infrastructure/security/jwt"
 )
 
+const userRegisteredTopic = "auth.user-registered.v1"
+
 func Run(ctx context.Context, version string) error {
 	ctx, stop := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
@@ -120,7 +122,7 @@ func Run(ctx context.Context, version string) error {
 	)
 
 	handlers := map[string]consumer.Handler{
-		cfg.Kafka.Topics.UserRegistered: kafkahandler.NewUserRegistered(userService, log),
+		userRegisteredTopic: kafkahandler.NewUserRegistered(userService, log),
 	}
 
 	kafkaConsumerClient, err := kafka.NewConsumerClient(

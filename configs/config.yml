@@ -24,8 +24,6 @@ postgres:
 
 kafka:
     brokers: ["${env:KAFKA_BROKERS}"]
-    topics:
-        user_registered: "${env:KAFKA_TOPIC_USER_REGISTERED:-auth.user-registered.v1}"
 
 health:
     period: 5s
