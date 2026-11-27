@@ -24,6 +24,7 @@ func NewConsumerClient(opts ConsumerOptions) (*kgo.Client, error) {
 		kgo.ConsumeTopics(opts.Topics...),
 		kgo.ConsumeResetOffset(kgo.NewOffset().AtStart()),
 		kgo.DisableAutoCommit(),
+		kgo.BlockRebalanceOnPoll(),
 		kgo.OnPartitionsAssigned(
 			func(ctx context.Context, _ *kgo.Client, assigned map[string][]int32) {
 				opts.Log.InfoContext(

@@ -10,7 +10,10 @@ import (
 	"github.com/twmb/franz-go/pkg/kgo"
 )
 
-const maxHandlerAttempts = 5
+const (
+	maxHandlerAttempts = 5
+	maxPollRecords     = 50
+)
 
 type Handler interface {
 	Handle(ctx context.Context, msg Message) error
@@ -22,6 +25,7 @@ type Options struct {
 	MinRetryDelay time.Duration
 	MaxRetryDelay time.Duration
 	CommitTimeout time.Duration
+	BatchTimeout  time.Duration
 	Log           *slog.Logger
 }
 
@@ -31,6 +35,7 @@ type Consumer struct {
 	minRetryDelay time.Duration
 	maxRetryDelay time.Duration
 	commitTimeout time.Duration
+	batchTimeout  time.Duration
 	log           *slog.Logger
 }
 
@@ -41,62 +46,68 @@ func New(opts Options) *Consumer {
 		minRetryDelay: opts.MinRetryDelay,
 		maxRetryDelay: opts.MaxRetryDelay,
 		commitTimeout: opts.CommitTimeout,
+		batchTimeout:  opts.BatchTimeout,
 		log:           opts.Log,
 	}
 }
 
 func (c *Consumer) Run(ctx context.Context) error {
 	for {
-		fetches := c.client.PollFetches(ctx)
-
-		if ctx.Err() != nil || fetches.IsClientClosed() {
-			return nil //nolint:nilerr // shutdown is not an error
-		}
-
-		fetches.EachError(
-			func(topic string, partition int32, err error) {
-				c.log.ErrorContext(
-					ctx, "kafka fetch failed",
-					slog.String("topic", topic),
-					slog.Int("partition", int(partition)),
-					slog.Any("err", err),
-				)
-			},
-		)
-
-		if fetches.Empty() {
-			continue
-		}
-
-		handled := make([]*kgo.Record, 0, fetches.NumRecords())
-
-		var handleErr error
-
-		for iter := fetches.RecordIter(); !iter.Done(); {
-			rec := iter.Next()
-
-			if err := c.handle(ctx, rec); err != nil {
-				handleErr = fmt.Errorf(
-					"handle kafka record %s[%d] at offset %d: %w",
-					rec.Topic, rec.Partition, rec.Offset, err,
-				)
-
-				break
-			}
-
-			handled = append(handled, rec)
-		}
-
-		commitErr := c.commit(ctx, handled)
-
-		if ctxErr := ctx.Err(); ctxErr != nil && (handleErr == nil || errors.Is(handleErr, ctxErr)) {
-			return commitErr
-		}
-
-		if handleErr != nil || commitErr != nil {
-			return errors.Join(handleErr, commitErr)
+		stopped, err := c.pollBatch(ctx)
+		if stopped || err != nil {
+			return err
 		}
 	}
+}
+
+func (c *Consumer) pollBatch(ctx context.Context) (bool, error) {
+	fetches := c.client.PollRecords(ctx, maxPollRecords)
+	defer c.client.AllowRebalance()
+
+	if ctx.Err() != nil || fetches.IsClientClosed() {
+		return true, nil
+	}
+
+	batchCtx, cancel := context.WithTimeout(ctx, c.batchTimeout)
+	defer cancel()
+
+	fetches.EachError(
+		func(topic string, partition int32, err error) {
+			c.log.ErrorContext(
+				ctx, "kafka fetch failed",
+				slog.String("topic", topic),
+				slog.Int("partition", int(partition)),
+				slog.Any("err", err),
+			)
+		},
+	)
+
+	handled := make([]*kgo.Record, 0, fetches.NumRecords())
+
+	var handleErr error
+
+	for iter := fetches.RecordIter(); !iter.Done(); {
+		rec := iter.Next()
+
+		if err := c.handle(batchCtx, rec); err != nil {
+			handleErr = fmt.Errorf(
+				"handle kafka record %s[%d] at offset %d: %w",
+				rec.Topic, rec.Partition, rec.Offset, err,
+			)
+
+			break
+		}
+
+		handled = append(handled, rec)
+	}
+
+	commitErr := c.commit(ctx, handled)
+
+	if ctxErr := ctx.Err(); ctxErr != nil && (handleErr == nil || errors.Is(handleErr, ctxErr)) {
+		return true, commitErr
+	}
+
+	return false, errors.Join(handleErr, commitErr)
 }
 
 func (c *Consumer) handle(ctx context.Context, rec *kgo.Record) error {
@@ -105,6 +116,10 @@ func (c *Consumer) handle(ctx context.Context, rec *kgo.Record) error {
 	msg := newMessage(rec)
 
 	for attempt := 1; ; attempt++ {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+
 		err := handler.Handle(ctx, msg)
 		if err == nil {
 			return nil

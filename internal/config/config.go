@@ -56,6 +56,7 @@ type Consumer struct {
 	MinRetryDelay time.Duration `validate:"gt=0"                        yaml:"min_retry_delay"`
 	MaxRetryDelay time.Duration `validate:"gt=0,gtefield=MinRetryDelay" yaml:"max_retry_delay"`
 	CommitTimeout time.Duration `validate:"gt=0"                        yaml:"commit_timeout"`
+	BatchTimeout  time.Duration `validate:"gt=0"                        yaml:"batch_timeout"`
 }
 
 type Health struct {
