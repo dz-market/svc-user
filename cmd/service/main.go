@@ -9,6 +9,7 @@ import (
 	"github.com/dz-market/svc-user/internal/bootstrap"
 )
 
+//nolint:gochecknoglobals // set at build time via -ldflags -X
 var buildVersion string
 
 func main() {
