@@ -27,6 +27,16 @@ tasks:
         cmds:
             - go fix ./...
 
+    test:
+        desc: Run unit tests
+        cmds:
+            - go test -race ./...
+
+    test:integration:
+        desc: Run integration tests
+        cmds:
+            - go test -tags=integration -race -count=1 -timeout=5m ./test/integration/...
+
     mocks:
         desc: Generate mocks
         cmds:
