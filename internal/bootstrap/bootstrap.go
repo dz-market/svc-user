@@ -133,9 +133,13 @@ func Run(ctx context.Context, version string) error {
 
 	kafkaConsumer := consumer.New(
 		consumer.Options{
-			Client:   kafkaConsumerClient,
-			Handlers: handlers,
-			Log:      log,
+			Client:        kafkaConsumerClient,
+			Handlers:      handlers,
+			MinRetryDelay: cfg.Kafka.Consumer.MinRetryDelay,
+			MaxRetryDelay: cfg.Kafka.Consumer.MaxRetryDelay,
+			CommitTimeout: cfg.Kafka.Consumer.CommitTimeout,
+			BatchTimeout:  cfg.Kafka.Consumer.BatchTimeout,
+			Log:           log,
 		},
 	)
 
