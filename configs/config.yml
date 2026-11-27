@@ -24,6 +24,10 @@ postgres:
 
 kafka:
     brokers: ["${env:KAFKA_BROKERS}"]
+    consumer:
+        min_retry_delay: 1s
+        max_retry_delay: 30s
+        commit_timeout: 10s
 
 health:
     period: 5s

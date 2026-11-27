@@ -8,33 +8,36 @@ import (
 	"github.com/twmb/franz-go/pkg/kgo"
 )
 
-const (
-	minRetryDelay = 1 * time.Second
-	maxRetryDelay = 30 * time.Second
-	commitTimeout = 10 * time.Second
-)
-
 type Handler interface {
 	Handle(ctx context.Context, msg Message) error
 }
 
 type Options struct {
-	Client   *kgo.Client
-	Handlers map[string]Handler
-	Log      *slog.Logger
+	Client        *kgo.Client
+	Handlers      map[string]Handler
+	MinRetryDelay time.Duration
+	MaxRetryDelay time.Duration
+	CommitTimeout time.Duration
+	Log           *slog.Logger
 }
 
 type Consumer struct {
-	client   *kgo.Client
-	handlers map[string]Handler
-	log      *slog.Logger
+	client        *kgo.Client
+	handlers      map[string]Handler
+	minRetryDelay time.Duration
+	maxRetryDelay time.Duration
+	commitTimeout time.Duration
+	log           *slog.Logger
 }
 
 func New(opts Options) *Consumer {
 	return &Consumer{
-		client:   opts.Client,
-		handlers: opts.Handlers,
-		log:      opts.Log,
+		client:        opts.Client,
+		handlers:      opts.Handlers,
+		minRetryDelay: opts.MinRetryDelay,
+		maxRetryDelay: opts.MaxRetryDelay,
+		commitTimeout: opts.CommitTimeout,
+		log:           opts.Log,
 	}
 }
 
@@ -117,7 +120,7 @@ func (c *Consumer) commit(ctx context.Context, recs []*kgo.Record) {
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), commitTimeout)
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), c.commitTimeout)
 	defer cancel()
 
 	if err := c.client.CommitRecords(ctx, recs...); err != nil {
@@ -129,5 +132,5 @@ func (c *Consumer) commit(ctx context.Context, recs []*kgo.Record) {
 }
 
 func (c *Consumer) retryDelay(attempt int) time.Duration {
-	return min(minRetryDelay<<min(attempt-1, 20), maxRetryDelay)
+	return min(c.minRetryDelay<<min(attempt-1, 20), c.maxRetryDelay)
 }

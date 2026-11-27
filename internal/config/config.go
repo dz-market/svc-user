@@ -48,7 +48,14 @@ type Postgres struct {
 }
 
 type Kafka struct {
-	Brokers []string `validate:"required,min=1,dive,required" yaml:"brokers"`
+	Brokers  []string `validate:"required,min=1,dive,required" yaml:"brokers"`
+	Consumer Consumer `yaml:"consumer"`
+}
+
+type Consumer struct {
+	MinRetryDelay time.Duration `validate:"gt=0"                        yaml:"min_retry_delay"`
+	MaxRetryDelay time.Duration `validate:"gt=0,gtefield=MinRetryDelay" yaml:"max_retry_delay"`
+	CommitTimeout time.Duration `validate:"gt=0"                        yaml:"commit_timeout"`
 }
 
 type Health struct {
