@@ -4,16 +4,31 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"runtime/debug"
 
 	"github.com/dz-market/svc-user/internal/bootstrap"
 )
 
-var version = "dev"
+var buildVersion string
 
 func main() {
-	if err := bootstrap.Run(context.Background(), version); err != nil {
+	if err := bootstrap.Run(context.Background(), version()); err != nil {
 		_, _ = fmt.Fprintln(os.Stderr, err)
 
 		os.Exit(1)
 	}
+}
+
+func version() string {
+	if buildVersion != "" {
+		return buildVersion
+	}
+
+	if info, ok := debug.ReadBuildInfo(); ok {
+		if version := info.Main.Version; version != "" && version != "(devel)" {
+			return version
+		}
+	}
+
+	return "dev"
 }
