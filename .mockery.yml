@@ -1,0 +1,34 @@
+all: false
+generate: true
+include-auto-generated: false
+
+dir: '{{.InterfaceDir}}/mocks'
+filename: '{{.InterfaceName | snakecase}}.go'
+force-file-write: true
+
+pkgname: mocks
+structname: 'Mock{{.InterfaceName}}'
+
+template: testify
+template-schema: '{{.Template}}.schema.json'
+require-template-schema-exists: true
+
+formatter: goimports
+
+log-level: info
+
+packages:
+    github.com/dz-market/svc-user/internal/application:
+        config:
+            recursive: true
+            all: true
+
+    github.com/dz-market/svc-user/internal/delivery/grpc/handler:
+        config:
+            recursive: true
+            all: true
+
+    github.com/dz-market/svc-user/internal/delivery/event/kafka/handler:
+        config:
+            recursive: true
+            all: true

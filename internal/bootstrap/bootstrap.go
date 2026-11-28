@@ -11,6 +11,7 @@ import (
 	"slices"
 	"syscall"
 
+	pconfig "github.com/dz-market/platform/config"
 	ppostgres "github.com/dz-market/platform/database/postgres"
 	plogger "github.com/dz-market/platform/logger"
 
@@ -30,7 +31,7 @@ func Run(ctx context.Context, version string) error {
 	ctx, stop := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	cfg, err := config.Load(ctx)
+	cfg, err := pconfig.Load[config.Config](ctx)
 	if err != nil {
 		return fmt.Errorf("load config: %w", err)
 	}
